@@ -251,7 +251,7 @@ export interface GasConfig {
 const STORAGE_KEY = 'mts_alhikmah_gas_config';
 
 // URL Default Google Apps Script (Bisa disetel di sini agar otomatis aktif di semua HP/Laptop)
-export const DEFAULT_GAS_URL = (import.meta as any).env?.VITE_GAS_URL || '';
+export const DEFAULT_GAS_URL = (import.meta as any).env?.VITE_GAS_URL || 'https://script.google.com/macros/s/AKfycbxSiwjNo4w5zFBkaM9-eqzLzD8wQCU-B_EERtu1LdpTG5tYRdiFMEsdJrGEIsZvOK0iEg/exec';
 
 export function getGasConfig(): GasConfig {
   let url = DEFAULT_GAS_URL;
