@@ -2,6 +2,7 @@ import React from 'react';
 import {
   LogOut,
   User as UserIcon,
+  RefreshCw,
 } from 'lucide-react';
 import { User, MadrasahSettings } from '../types';
 import { GasConfig } from '../services/gasService';
@@ -15,13 +16,18 @@ interface HeaderProps {
   onOpenGasModal: () => void;
   onLogout: () => void;
   setIsMobileOpen?: (open: boolean) => void;
+  isSyncing?: boolean;
+  onSyncAllData?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
   activeTab,
   currentUser,
+  gasConfig,
   settings,
   onLogout,
+  isSyncing,
+  onSyncAllData,
 }) => {
   const getTabTitle = (tab: string) => {
     switch (tab) {
@@ -81,7 +87,31 @@ export const Header: React.FC<HeaderProps> = ({
       </div>
 
       {/* Right: Sleek User Profile lockup & Direct Logout button */}
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-2.5">
+        {/* Cloud Sync Button */}
+        {onSyncAllData && (
+          <button
+            type="button"
+            onClick={onSyncAllData}
+            disabled={isSyncing}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition-all border shadow-2xs active:scale-95 cursor-pointer ${
+              gasConfig?.webAppUrl
+                ? 'bg-emerald-50 text-[#047857] border-emerald-200 hover:bg-emerald-100'
+                : 'bg-amber-50 text-amber-800 border-amber-200 hover:bg-amber-100'
+            }`}
+            title={
+              gasConfig?.webAppUrl
+                ? 'Tarik dan perbarui data terbaru dari Google Sheets lintas perangkat'
+                : 'URL Google Sheets belum terpasang di perangkat ini'
+            }
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin text-[#047857]' : 'text-emerald-700'}`} />
+            <span className="hidden md:inline">
+              {isSyncing ? 'Menyinkronkan...' : 'Sinkron Awan'}
+            </span>
+          </button>
+        )}
+
         {/* User Badge */}
         <div className="flex items-center gap-2.5 pl-3 pr-2 py-1 bg-[#F4F8F5] rounded-full border border-[#D5E2DA]">
           <div className="w-7 h-7 rounded-full bg-[#1B3A33] text-white flex items-center justify-center font-bold text-xs shrink-0 overflow-hidden">
