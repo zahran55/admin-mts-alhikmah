@@ -1,7 +1,4 @@
-/**
- * Google Apps Script (GAS) Service & Code Generator
- * MTs Al-Hikmah Wonosobo Administrative System
- */
+import { Siswa, Guru, Keuangan, SuratMasuk, SuratKeluar, BukuTamu, Absensi } from '../types';
 
 export const GAS_CODE_GS = `/**
  * ============================================================================
@@ -271,9 +268,17 @@ export async function testGasConnection(url: string): Promise<{ success: boolean
     return { success: false, message: 'URL Web App tidak valid. Pastikan diawali dengan https://script.google.com/...' };
   }
 
+  // Deteksi jika user salah menyalin URL /dev (test deployment) alih-alih /exec (production)
+  if (url.endsWith('/dev') || url.includes('/dev?')) {
+    return {
+      success: false,
+      message: 'Perhatian: Anda menyalin URL uji coba (/dev). URL /dev ini tidak bisa diakses publik. Silakan buka Apps Script > Deploy > New deployment (Penerapan Baru) > dan salin URL yang berakhiran /exec.',
+    };
+  }
+
   try {
     const testUrl = `${url}${url.includes('?') ? '&' : '?'}action=ping`;
-    const res = await fetch(testUrl, { method: 'GET' });
+    const res = await fetch(testUrl, { method: 'GET', redirect: 'follow' });
     const data = await res.json();
 
     if (data.success) {
@@ -286,10 +291,9 @@ export async function testGasConnection(url: string): Promise<{ success: boolean
       return { success: false, message: data.error || 'Respon API Apps Script mengembalikan status gagal.' };
     }
   } catch (err: any) {
-    // Note: If CORS is restricted in some environments, we provide clear instructions
     return {
       success: false,
-      message: 'Gagal menghubungi Web App Google Apps Script. Pastikan pengaturan "Who has access" diisi "Anyone" (Siapa saja).',
+      message: 'Gagal menghubungi Web App Google Apps Script. Periksa: 1) Pastikan URL berakhiran /exec bukan /dev, 2) Pastikan sudah klik "Jalankan/Run" fungsi initSheetsDatabase dan memberikan izin (Review Permissions), 3) Jika baru mengganti kode, pastikan buat "New Version" saat Deploy.',
     };
   }
 }
@@ -305,3 +309,139 @@ export function downloadGasScriptFile(): void {
   document.body.removeChild(link);
   URL.revokeObjectURL(url);
 }
+
+/**
+ * Kirim data ke Google Apps Script Web App secara otomatis
+ */
+export async function postToGoogleSheets(payload: any): Promise<boolean> {
+  const config = getGasConfig();
+  if (!config.webAppUrl) {
+    return false;
+  }
+
+  try {
+    // Mode no-cors dengan text/plain adalah standar pengiriman data ke Google Apps Script dari browser tanpa terblokir CORS
+    await fetch(config.webAppUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'text/plain;charset=utf-8',
+      },
+      body: JSON.stringify(payload),
+      mode: 'no-cors',
+    });
+    return true;
+  } catch (err) {
+    console.warn('Gagal sinkronisasi ke Google Sheets:', err);
+    return false;
+  }
+}
+
+export function syncAddSiswaToGas(siswa: Siswa) {
+  return postToGoogleSheets({
+    action: 'insert',
+    sheet: 'Siswa',
+    data: {
+      'NIS': siswa.nis,
+      'NISN': siswa.nisn,
+      'Name': siswa.name,
+      'Class': siswa.class,
+      'Gender': siswa.gender,
+      'Address': siswa.address,
+      'Parent Contact': siswa.parentContact,
+      'Photo URL': siswa.photoUrl,
+      'Barcode/QR': siswa.barcodeQR || siswa.nis,
+    },
+  });
+}
+
+export function syncAddBukuTamuToGas(tamu: BukuTamu) {
+  return postToGoogleSheets({
+    action: 'addGuest',
+    guest: {
+      id: tamu.id,
+      timestamp: tamu.timestamp,
+      guestName: tamu.guestName,
+      institution: tamu.institution,
+      purpose: tamu.purpose,
+      meetTarget: tamu.meetTarget || tamu.phone || '-',
+      phone: tamu.meetTarget || tamu.phone || '-',
+      notes: tamu.notes || tamu.signatureLink || '-',
+      signatureLink: tamu.signatureLink || '-',
+    },
+  });
+}
+
+export function syncAddGuruToGas(guru: Guru) {
+  return postToGoogleSheets({
+    action: 'insert',
+    sheet: 'Guru',
+    data: {
+      'NIP': guru.nip,
+      'Name': guru.name,
+      'Subject Assigned': guru.subjectAssigned,
+      'Phone': guru.phone,
+      'Email': guru.email,
+      'Status': guru.status,
+    },
+  });
+}
+
+export function syncAddKeuanganToGas(k: Keuangan) {
+  return postToGoogleSheets({
+    action: 'insert',
+    sheet: 'Keuangan',
+    data: {
+      'ID': k.id,
+      'Date': k.date,
+      'Category': k.category,
+      'Description': k.description,
+      'Amount': k.amount,
+      'Receipt No': k.receiptNo,
+      'Admin User': k.adminUser,
+    },
+  });
+}
+
+export function syncAddSuratMasukToGas(sm: SuratMasuk) {
+  return postToGoogleSheets({
+    action: 'insert',
+    sheet: 'SuratMasuk',
+    data: {
+      'Letter No': sm.letterNo,
+      'Date Received': sm.dateReceived,
+      'Sender': sm.sender,
+      'Subject': sm.subject,
+      'File Link': sm.fileLink || '-',
+      'Status': sm.status,
+    },
+  });
+}
+
+export function syncAddSuratKeluarToGas(sk: SuratKeluar) {
+  return postToGoogleSheets({
+    action: 'insert',
+    sheet: 'SuratKeluar',
+    data: {
+      'Letter No': sk.letterNo,
+      'Date Sent': sk.dateSent,
+      'Recipient': sk.recipient,
+      'Subject': sk.subject,
+      'Generator Template ID': sk.templateId,
+    },
+  });
+}
+
+export function syncAddAbsensiToGas(a: Absensi) {
+  return postToGoogleSheets({
+    action: 'logAttendance',
+    record: {
+      id: a.id,
+      date: a.date,
+      time: a.time,
+      userStudentId: a.userStudentId,
+      type: a.type,
+      status: a.status,
+    },
+  });
+}
+
