@@ -35,7 +35,18 @@ import {
   Announcement,
   MadrasahSettings,
 } from './types';
-import { getGasConfig, saveGasConfig, GasConfig } from './services/gasService';
+import {
+  getGasConfig,
+  saveGasConfig,
+  GasConfig,
+  syncAddSiswaToGas,
+  syncAddBukuTamuToGas,
+  syncAddGuruToGas,
+  syncAddKeuanganToGas,
+  syncAddSuratMasukToGas,
+  syncAddSuratKeluarToGas,
+  syncAddAbsensiToGas,
+} from './services/gasService';
 
 import { LoginPage } from './components/LoginPage';
 import { Sidebar } from './components/Sidebar';
@@ -283,13 +294,26 @@ export default function App() {
     localStorage.setItem('mts_madrasah_settings', JSON.stringify(newSettings));
   };
 
-  // CRUD Handlers
+  // Notification Toast for sync
+  const [syncToast, setSyncToast] = useState<{ message: string; isGas: boolean } | null>(null);
+
+  const showSyncNotification = (message: string) => {
+    const isGas = Boolean(gasConfig.webAppUrl);
+    setSyncToast({ message, isGas });
+    setTimeout(() => setSyncToast(null), 4000);
+  };
+
+  // CRUD Handlers with Auto-Sync to Google Sheets
   const handleAddSiswa = (newSiswa: Siswa) => {
     setSiswaList([newSiswa, ...siswaList]);
+    syncAddSiswaToGas(newSiswa);
+    showSyncNotification('Data siswa baru berhasil disimpan & dikirim ke Google Sheets!');
   };
 
   const handleUpdateSiswa = (updatedSiswa: Siswa) => {
     setSiswaList(siswaList.map((s) => (s.nis === updatedSiswa.nis ? updatedSiswa : s)));
+    syncAddSiswaToGas(updatedSiswa);
+    showSyncNotification('Data siswa berhasil diperbarui di sistem & Google Sheets!');
   };
 
   const handleDeleteSiswa = (nis: string) => {
@@ -298,10 +322,14 @@ export default function App() {
 
   const handleAddGuru = (newGuru: Guru) => {
     setGuruList([newGuru, ...guruList]);
+    syncAddGuruToGas(newGuru);
+    showSyncNotification('Data guru berhasil disimpan & dikirim ke Google Sheets!');
   };
 
   const handleUpdateGuru = (updatedGuru: Guru) => {
     setGuruList(guruList.map((g) => (g.nip === updatedGuru.nip ? updatedGuru : g)));
+    syncAddGuruToGas(updatedGuru);
+    showSyncNotification('Data guru berhasil diperbarui di sistem & Google Sheets!');
   };
 
   const handleDeleteGuru = (nip: string) => {
@@ -310,6 +338,8 @@ export default function App() {
 
   const handleAddKeuangan = (newKeuangan: Keuangan) => {
     setKeuanganList([newKeuangan, ...keuanganList]);
+    syncAddKeuanganToGas(newKeuangan);
+    showSyncNotification('Transaksi kas berhasil dicatat & disinkronkan ke Google Sheets!');
   };
 
   const handleDeleteKeuangan = (id: string) => {
@@ -318,6 +348,8 @@ export default function App() {
 
   const handleAddSuratMasuk = (surat: SuratMasuk) => {
     setSuratMasukList([surat, ...suratMasukList]);
+    syncAddSuratMasukToGas(surat);
+    showSyncNotification('Surat masuk berhasil diregistrasi & disinkronkan ke Google Sheets!');
   };
 
   const handleDeleteSuratMasuk = (letterNo: string) => {
@@ -326,6 +358,8 @@ export default function App() {
 
   const handleAddSuratKeluar = (surat: SuratKeluar) => {
     setSuratKeluarList([surat, ...suratKeluarList]);
+    syncAddSuratKeluarToGas(surat);
+    showSyncNotification('Surat keluar berhasil dibuat & disinkronkan ke Google Sheets!');
   };
 
   const handleDeleteSuratKeluar = (letterNo: string) => {
@@ -334,6 +368,8 @@ export default function App() {
 
   const handleAddBukuTamu = (tamu: BukuTamu) => {
     setBukuTamuList([tamu, ...bukuTamuList]);
+    syncAddBukuTamuToGas(tamu);
+    showSyncNotification('Buku tamu berhasil dicatat & dikirim ke Google Sheets!');
   };
 
   const handleDeleteBukuTamu = (id: string) => {
@@ -342,6 +378,8 @@ export default function App() {
 
   const handleAddAbsensi = (record: Absensi) => {
     setAbsensiList([record, ...absensiList]);
+    syncAddAbsensiToGas(record);
+    showSyncNotification('Presensi santri/guru berhasil direkam ke Google Sheets!');
   };
 
   const handleAddMapel = (mapel: MataPelajaran) => {
@@ -546,6 +584,19 @@ export default function App() {
           )}
         </div>
       </main>
+
+      {/* FLOATING SYNC TOAST NOTIFICATION */}
+      {syncToast && (
+        <div className="fixed bottom-20 md:bottom-6 right-6 z-50 bg-[#1B3A33] text-white px-5 py-3 rounded-2xl shadow-xl flex items-center gap-3 border border-emerald-500/30 animate-in fade-in slide-in-from-bottom-3 duration-300">
+          <div className={`w-2.5 h-2.5 rounded-full ${syncToast.isGas ? 'bg-emerald-400 animate-pulse' : 'bg-[#CCA13B]'}`} />
+          <div>
+            <p className="text-xs font-semibold">{syncToast.message}</p>
+            {syncToast.isGas && (
+              <p className="text-[10px] text-emerald-200/80">Google Sheets Web App terhubung</p>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* MOBILE & TABLET BOTTOM NAVIGATION BAR (Android/Tablet/Phone responsive) */}
       <BottomNav
