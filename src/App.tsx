@@ -39,6 +39,7 @@ import {
   getGasConfig,
   saveGasConfig,
   GasConfig,
+  fetchAllSheetsFromGas,
   syncAddSiswaToGas,
   syncAddBukuTamuToGas,
   syncAddGuruToGas,
@@ -254,6 +255,54 @@ export default function App() {
     localStorage.setItem('mts_arsip_data', JSON.stringify(arsipList));
   }, [arsipList]);
 
+  // Real-time Cloud Sync State (Sinkronisasi Lintas Perangkat)
+  const [isSyncing, setIsSyncing] = useState<boolean>(false);
+
+  const syncAllDataFromGoogleSheets = async (customUrl?: string) => {
+    const url = customUrl || gasConfig.webAppUrl;
+    if (!url) return;
+
+    setIsSyncing(true);
+    try {
+      const data = await fetchAllSheetsFromGas(url);
+      if (data) {
+        if (data.siswa && data.siswa.length > 0) {
+          setSiswaList(data.siswa);
+        }
+        if (data.bukuTamu && data.bukuTamu.length > 0) {
+          setBukuTamuList(data.bukuTamu);
+        }
+        if (data.guru && data.guru.length > 0) {
+          setGuruList(data.guru);
+        }
+        if (data.keuangan && data.keuangan.length > 0) {
+          setKeuanganList(data.keuangan);
+        }
+        if (data.suratMasuk && data.suratMasuk.length > 0) {
+          setSuratMasukList(data.suratMasuk);
+        }
+        if (data.suratKeluar && data.suratKeluar.length > 0) {
+          setSuratKeluarList(data.suratKeluar);
+        }
+        if (data.absensi && data.absensi.length > 0) {
+          setAbsensiList(data.absensi);
+        }
+        showSyncNotification('Sinkronisasi selesai! Semua data perangkat telah terbarui.');
+      }
+    } catch (err) {
+      console.warn('Gagal sinkronisasi data dari Google Sheets:', err);
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  // Otomatis tarik data terbaru dari Google Sheets saat aplikasi dibuka atau saat URL GAS berubah
+  useEffect(() => {
+    if (gasConfig.webAppUrl) {
+      syncAllDataFromGoogleSheets(gasConfig.webAppUrl);
+    }
+  }, [gasConfig.webAppUrl]);
+
   // Auth Handlers
   const handleLoginSuccess = (user: User) => {
     setCurrentUser(user);
@@ -450,6 +499,8 @@ export default function App() {
           onOpenGasModal={() => setActiveTab('database')}
           onLogout={handleLogout}
           setIsMobileOpen={setIsMobileOpen}
+          isSyncing={isSyncing}
+          onSyncAllData={() => syncAllDataFromGoogleSheets()}
         />
 
         {/* CONTENT CONTAINER */}
