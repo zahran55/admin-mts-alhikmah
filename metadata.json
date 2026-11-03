@@ -1,0 +1,6 @@
+{
+  "name": "MTs Al-Hikmah - Sistem Administrasi & Portal Madrasah",
+  "description": "Sistem Informasi Manajemen Terpadu MTs Al-Hikmah Wonosobo dengan arsitektur Google Sheets & Google Apps Script, Manajemen Siswa, Guru, Keuangan, Surat, Presensi Barcode, Rapor, dan Widget Portal Publik.",
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
