@@ -108,6 +108,16 @@ function doGet(e) {
       const data = getSheetDataAsObjects(sheet);
       return jsonResponse({ success: true, sheet: sheetName, count: data.length, data: data });
     }
+
+    // 2b. Ambil Semua Sheet Sekaligus untuk Sinkronisasi Cepat Lintas Perangkat
+    if (action === "getAllSheets") {
+      const result = {};
+      for (const sheetName in SHEETS_CONFIG) {
+        const sheet = ss.getSheetByName(sheetName);
+        result[sheetName] = sheet ? getSheetDataAsObjects(sheet) : [];
+      }
+      return jsonResponse({ success: true, timestamp: new Date().toISOString(), data: result });
+    }
     
     // 3. Verifikasi Publik Siswa berdasarkan NISN (Untuk Portal mtsalhikmahwsb.com)
     if (action === "lookupStudent") {
@@ -240,18 +250,25 @@ export interface GasConfig {
 
 const STORAGE_KEY = 'mts_alhikmah_gas_config';
 
+// URL Default Google Apps Script (Bisa disetel di sini agar otomatis aktif di semua HP/Laptop)
+export const DEFAULT_GAS_URL = (import.meta as any).env?.VITE_GAS_URL || '';
+
 export function getGasConfig(): GasConfig {
+  let url = DEFAULT_GAS_URL;
   try {
     const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) return JSON.parse(saved);
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      if (parsed.webAppUrl) url = parsed.webAppUrl;
+    }
   } catch (e) {
     console.error('Failed to load gas config', e);
   }
   return {
-    webAppUrl: '',
+    webAppUrl: url,
     spreadsheetId: '',
     lastSync: undefined,
-    isConnected: false,
+    isConnected: Boolean(url),
   };
 }
 
@@ -444,4 +461,195 @@ export function syncAddAbsensiToGas(a: Absensi) {
     },
   });
 }
+
+// ============================================================================
+// MAPPERS: Konversi data mentah Google Sheets menjadi format aplikasi MTs
+// ============================================================================
+
+export function mapGasSiswa(rows: any[]): Siswa[] {
+  if (!Array.isArray(rows)) return [];
+  return rows
+    .map((r) => ({
+      nis: String(r['NIS'] || r.nis || ''),
+      nisn: String(r['NISN'] || r.nisn || ''),
+      name: String(r['Name'] || r.name || ''),
+      class: (r['Class'] || r.class || '7A') as any,
+      gender: (r['Gender'] || r.gender || 'L') as any,
+      birthPlaceDate: 'Wonosobo',
+      address: String(r['Address'] || r.address || 'Wonosobo'),
+      parentContact: String(r['Parent Contact'] || r.parentContact || '-'),
+      parentName: '-',
+      photoUrl: String(r['Photo URL'] || r.photoUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150'),
+      barcodeQR: String(r['Barcode/QR'] || r.barcodeQR || `NIS-${r['NIS'] || r.nis}`),
+      status: 'Aktif' as any,
+    }))
+    .filter((s) => s.nis && s.name);
+}
+
+export function mapGasBukuTamu(rows: any[]): BukuTamu[] {
+  if (!Array.isArray(rows)) return [];
+  return rows
+    .map((r, i) => ({
+      id: String(r['ID'] || r.id || `GUEST-${Date.now()}-${i}`),
+      timestamp: String(r['Timestamp'] || r.timestamp || new Date().toISOString().replace('T', ' ').substring(0, 19)),
+      guestName: String(r['Guest Name'] || r.guestName || ''),
+      institution: String(r['Institution/Origin'] || r.institution || '-'),
+      purpose: String(r['Purpose'] || r.purpose || '-'),
+      meetTarget: String(r['Phone'] || r.meetTarget || 'Kepala Madrasah'),
+      notes: String(r['Signature Link'] || r.notes || ''),
+      signatureLink: '#verified',
+    }))
+    .filter((t) => t.guestName);
+}
+
+export function mapGasGuru(rows: any[]): Guru[] {
+  if (!Array.isArray(rows)) return [];
+  return rows
+    .map((r) => ({
+      nip: String(r['NIP'] || r.nip || ''),
+      name: String(r['Name'] || r.name || ''),
+      subjectAssigned: String(r['Subject Assigned'] || r.subjectAssigned || '-'),
+      phone: String(r['Phone'] || r.phone || '-'),
+      email: String(r['Email'] || r.email || '-'),
+      status: (r['Status'] || r.status || 'PNS') as any,
+      teachingHours: Number(r['Teaching Hours'] || r.teachingHours || 24),
+      avatarUrl: String(r['Photo URL'] || r.avatarUrl || 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150'),
+    }))
+    .filter((g) => g.nip && g.name);
+}
+
+export function mapGasKeuangan(rows: any[]): Keuangan[] {
+  if (!Array.isArray(rows)) return [];
+  return rows.map((r, i) => {
+    const cat = (r['Category'] || r.category || 'Inflow') as 'Inflow' | 'Outflow';
+    return {
+      id: String(r['ID'] || r.id || `TRX-${Date.now()}-${i}`),
+      date: String(r['Date'] || r.date || new Date().toISOString().split('T')[0]),
+      category: cat,
+      type: (r['Type'] || r.type || (cat === 'Inflow' ? 'SPP Bulanan' : 'Operasional Sekolah')) as any,
+      description: String(r['Description'] || r.description || '-'),
+      amount: Number(r['Amount'] || r.amount || 0),
+      receiptNo: String(r['Receipt No'] || r.receiptNo || `KW-${Date.now()}`),
+      adminUser: String(r['Admin User'] || r.adminUser || 'Bendahara'),
+    };
+  });
+}
+
+export function mapGasSuratMasuk(rows: any[]): SuratMasuk[] {
+  if (!Array.isArray(rows)) return [];
+  return rows
+    .map((r) => ({
+      letterNo: String(r['Letter No'] || r.letterNo || ''),
+      dateReceived: String(r['Date Received'] || r.dateReceived || ''),
+      sender: String(r['Sender'] || r.sender || '-'),
+      subject: String(r['Subject'] || r.subject || '-'),
+      fileLink: String(r['File Link'] || r.fileLink || '#'),
+      status: (r['Status'] || r.status || 'Diterima') as any,
+      notes: '',
+    }))
+    .filter((s) => s.letterNo);
+}
+
+export function mapGasSuratKeluar(rows: any[]): SuratKeluar[] {
+  if (!Array.isArray(rows)) return [];
+  return rows
+    .map((r) => ({
+      letterNo: String(r['Letter No'] || r.letterNo || ''),
+      dateSent: String(r['Date Sent'] || r.dateSent || ''),
+      recipient: String(r['Recipient'] || r.recipient || ''),
+      subject: String(r['Subject'] || r.subject || ''),
+      templateId: (r['Generator Template ID'] || r.templateId || 'Undangan Rapat') as any,
+      content: 'Dengan hormat, sehubungan dengan agenda madrasah dan persiapan kurikulum terpadu tahun ajaran berjalan, kami mengundang Bapak/Ibu untuk hadir dalam pertemuan yang akan diselenggarakan pada:',
+      eventDayDate: 'Ahad, 15 November 2026',
+      eventTime: 'Pukul 08.30 WIB s.d Selesai',
+      eventPlace: 'Aula Pertemuan MTs Al-Hikmah Wonosobo',
+      eventAgenda: 'Rapat Koordinasi Evaluasi Pembelajaran & Parenting Santri',
+      closingText: 'Demikian surat ini kami sampaikan, atas perhatian dan kehadirannya kami ucapkan terima kasih.',
+      status: ((r['Status'] || r.status || 'Terkirim') as 'Draft' | 'Terkirim' | 'Diarsipkan'),
+      signerName: 'Kepala Madrasah',
+    }))
+    .filter((s) => s.letterNo);
+}
+
+export function mapGasAbsensi(rows: any[]): Absensi[] {
+  if (!Array.isArray(rows)) return [];
+  return rows
+    .map((r, i) => ({
+      id: String(r['ID'] || r.id || `ATT-${Date.now()}-${i}`),
+      date: String(r['Date'] || r.date || ''),
+      time: String(r['Time'] || r.time || ''),
+      userStudentId: String(r['User/Student ID'] || r.userStudentId || ''),
+      name: String(r['Name'] || r.name || 'Santri MTs'),
+      role: (r['Role'] || r.role || 'Siswa') as 'Siswa' | 'Guru',
+      classOrSubject: String(r['Class'] || r.classOrSubject || 'Kelas 7A'),
+      type: (r['Type'] || r.type || 'Check-in') as any,
+      status: (r['Status'] || r.status || 'Present') as any,
+      verificationMethod: 'Barcode Scan' as const,
+    }))
+    .filter((a) => a.userStudentId);
+}
+
+/**
+ * Mengambil semua data dari Google Sheets untuk sinkronisasi lintas perangkat
+ */
+export async function fetchAllSheetsFromGas(customUrl?: string): Promise<{
+  siswa?: Siswa[];
+  bukuTamu?: BukuTamu[];
+  guru?: Guru[];
+  keuangan?: Keuangan[];
+  suratMasuk?: SuratMasuk[];
+  suratKeluar?: SuratKeluar[];
+  absensi?: Absensi[];
+} | null> {
+  const config = getGasConfig();
+  const url = customUrl || config.webAppUrl;
+  if (!url) return null;
+
+  try {
+    // 1. Coba endpoint batch getAllSheets
+    const batchUrl = `${url}${url.includes('?') ? '&' : '?'}action=getAllSheets`;
+    const res = await fetch(batchUrl, { method: 'GET', redirect: 'follow' });
+    const json = await res.json();
+    if (json.success && json.data) {
+      return {
+        siswa: json.data.Siswa ? mapGasSiswa(json.data.Siswa) : undefined,
+        bukuTamu: json.data.BukuTamu ? mapGasBukuTamu(json.data.BukuTamu) : undefined,
+        guru: json.data.Guru ? mapGasGuru(json.data.Guru) : undefined,
+        keuangan: json.data.Keuangan ? mapGasKeuangan(json.data.Keuangan) : undefined,
+        suratMasuk: json.data.SuratMasuk ? mapGasSuratMasuk(json.data.SuratMasuk) : undefined,
+        suratKeluar: json.data.SuratKeluar ? mapGasSuratKeluar(json.data.SuratKeluar) : undefined,
+        absensi: json.data.Absensi ? mapGasAbsensi(json.data.Absensi) : undefined,
+      };
+    }
+  } catch (e) {
+    // 2. Fallback: jika script di spreadsheet belum di-update dengan getAllSheets, fetch sheet penting secara paralel
+    try {
+      const [siswaRes, tamuRes, guruRes, keuanganRes] = await Promise.all([
+        fetch(`${url}${url.includes('?') ? '&' : '?'}action=getSheet&sheet=Siswa`, { redirect: 'follow' })
+          .then((r) => r.json())
+          .catch(() => null),
+        fetch(`${url}${url.includes('?') ? '&' : '?'}action=getSheet&sheet=BukuTamu`, { redirect: 'follow' })
+          .then((r) => r.json())
+          .catch(() => null),
+        fetch(`${url}${url.includes('?') ? '&' : '?'}action=getSheet&sheet=Guru`, { redirect: 'follow' })
+          .then((r) => r.json())
+          .catch(() => null),
+        fetch(`${url}${url.includes('?') ? '&' : '?'}action=getSheet&sheet=Keuangan`, { redirect: 'follow' })
+          .then((r) => r.json())
+          .catch(() => null),
+      ]);
+
+      return {
+        siswa: siswaRes?.success && siswaRes.data?.length ? mapGasSiswa(siswaRes.data) : undefined,
+        bukuTamu: tamuRes?.success && tamuRes.data?.length ? mapGasBukuTamu(tamuRes.data) : undefined,
+        guru: guruRes?.success && guruRes.data?.length ? mapGasGuru(guruRes.data) : undefined,
+        keuangan: keuanganRes?.success && keuanganRes.data?.length ? mapGasKeuangan(keuanganRes.data) : undefined,
+      };
+    } catch (err) {
+      console.warn('Fallback sheet fetch gagal:', err);
+    }
+  }
+  return null;
+}
+
 
